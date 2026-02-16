@@ -1,0 +1,8 @@
+export { Navbar } from "./navbar"
+export { HeroSection } from "./hero-section"
+export { AboutSection } from "./about-section"
+export { WorkflowSection } from "./workflow-section"
+export { DocumentsSection } from "./documents-section"
+export { DatesSection, type ImportantDates } from "./dates-section"
+export { CtaSection } from "./cta-section"
+export { FooterSection } from "./footer-section"
