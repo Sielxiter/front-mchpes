@@ -1,1 +1,27 @@
-vjh
+cd backend
+php artisan tinker
+
+
+<?php
+use App\Models\User;
+use Illuminate\Support\Facades\Hash;
+
+User::updateOrCreate(
+  ['email' => 'candidat@uca.ac.ma'],
+  ['name' => 'Candidat Test', 'password' => Hash::make('password'), 'role' => User::ROLE_CANDIDAT]
+);
+
+User::updateOrCreate(
+  ['email' => 'admin@example.com'],
+  ['name' => 'Admin Test', 'password' => Hash::make('password'), 'role' => User::ROLE_ADMIN]
+);
+
+User::updateOrCreate(
+  ['email' => 'commission@example.com'],
+  ['name' => 'Commission Test', 'password' => Hash::make('password'), 'role' => User::ROLE_COMMISSION]
+);
+
+User::updateOrCreate(
+  ['email' => 'president@example.com'],
+  ['name' => 'President Test', 'password' => Hash::make('password'), 'role' => User::ROLE_PRESIDENT]
+);
