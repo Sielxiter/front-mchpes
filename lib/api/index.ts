@@ -11,6 +11,7 @@ export {
   pfesApi,
   activitesApi,
   documentsApi,
+  generatedDocsApi,
   deadlinesApi,
   ApiRequestError,
 } from "./candidature";
@@ -25,6 +26,8 @@ export type {
   Deadline,
   ActiviteType,
   CategoryDefinitions,
+  GeneratedDocTypeKey,
+  GeneratedDocStatus,
 } from "./candidature";
 
 // Commission APIs

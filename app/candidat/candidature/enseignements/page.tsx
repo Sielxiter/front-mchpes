@@ -1,8 +1,8 @@
 "use client"
 
-import React, { useState, useEffect, useCallback } from "react"
+import React, { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { IconCheck, IconLoader2, IconPlus, IconTrash } from "@tabler/icons-react"
+import { IconCheck, IconLoader2, IconPlus, IconTrash, IconCloudUpload, IconFile, IconX } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -23,8 +23,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Progress } from "@/components/ui/progress"
 import { toast } from "sonner"
-import { enseignementsApi, ApiRequestError } from "@/lib/api"
+import { enseignementsApi, documentsApi, ApiRequestError } from "@/lib/api"
 import { useLocalDraftArray } from "@/hooks/use-local-draft"
 
 interface Enseignement {
@@ -72,11 +73,28 @@ export default function EnseignementsPage() {
     niveau: "L1",
   })
 
+  // Justificatif upload state
+  interface UploadedDoc { id: number; original_name: string; size: number }
+  const [uploadedJustificatif, setUploadedJustificatif] = useState<UploadedDoc | null>(null)
+  const [uploadingJustificatif, setUploadingJustificatif] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [dragOver, setDragOver] = useState(false)
+  const MAX_FILE_SIZE = 10 * 1024 * 1024
+
+  const formatBytes = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} o`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} Ko`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`
+  }
+
   // Load from API on mount
   useEffect(() => {
     const loadData = async () => {
       try {
-        const response = await enseignementsApi.getAll()
+        const [response, docsResponse] = await Promise.all([
+          enseignementsApi.getAll(),
+          documentsApi.getAll("enseignements_pdf"),
+        ])
         if (response.enseignements.length > 0) {
           // Use API data if available, mapping to local format
           setEnseignements(response.enseignements.map(e => ({
@@ -89,6 +107,14 @@ export default function EnseignementsPage() {
             volume_horaire: Number(e.volume_horaire),
             equivalent_tp: Number(e.equivalent_tp),
           })))
+        }
+        if (docsResponse.documents.length > 0) {
+          const latest = docsResponse.documents[0]
+          setUploadedJustificatif({
+            id: latest.id,
+            original_name: latest.original_name,
+            size: latest.size,
+          })
         }
       } catch {
         // API failed, will use localStorage draft
@@ -178,6 +204,51 @@ export default function EnseignementsPage() {
   }, {} as Record<string, Enseignement[]>)
 
   const totalEquivalentTp = enseignements.reduce((sum, e) => sum + Number(e.equivalent_tp ?? 0), 0)
+
+  const handleJustificatifUpload = async (file: File) => {
+    if (file.type !== "application/pdf") {
+      toast.error("Seuls les fichiers PDF sont autorisés")
+      return
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      toast.error("Le fichier ne doit pas dépasser 10 Mo")
+      return
+    }
+
+    setUploadingJustificatif(true)
+    setUploadProgress(0)
+    try {
+      if (uploadedJustificatif) {
+        await documentsApi.delete(uploadedJustificatif.id)
+      }
+      const response = await documentsApi.upload(file, "enseignements_pdf", (percent) => {
+        setUploadProgress(percent)
+      })
+      setUploadedJustificatif({
+        id: response.document.id,
+        original_name: response.document.original_name,
+        size: response.document.size,
+      })
+      toast.success("Justificatif téléversé avec succès")
+    } catch (error) {
+      if (error instanceof ApiRequestError) toast.error(error.message)
+      else toast.error("Erreur lors du téléversement")
+    } finally {
+      setUploadingJustificatif(false)
+      setUploadProgress(0)
+    }
+  }
+
+  const handleJustificatifDelete = async () => {
+    if (!uploadedJustificatif) return
+    try {
+      await documentsApi.delete(uploadedJustificatif.id)
+      setUploadedJustificatif(null)
+      toast.success("Justificatif supprimé")
+    } catch {
+      toast.error("Erreur lors de la suppression")
+    }
+  }
 
   const handleSubmit = async () => {
     if (enseignements.length === 0) {
@@ -440,6 +511,74 @@ export default function EnseignementsPage() {
             <strong>Note:</strong> Un PDF récapitulatif avec déclaration sur l&apos;honneur sera généré automatiquement.
             Vous devrez le signer et le téléverser.
           </p>
+        </CardContent>
+      </Card>
+
+      {/* Justificatif Upload */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Justificatif (attestation)</CardTitle>
+          <CardDescription>
+            Déposez une attestation visée par le chef d&apos;établissement (PDF, max 10 Mo).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <input
+            id="justificatif-upload"
+            type="file"
+            accept=".pdf"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) handleJustificatifUpload(file)
+              e.target.value = ""
+            }}
+          />
+          <div
+            onDrop={(e) => {
+              e.preventDefault()
+              setDragOver(false)
+              const file = e.dataTransfer.files?.[0]
+              if (file) handleJustificatifUpload(file)
+            }}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+            onDragLeave={(e) => { e.preventDefault(); setDragOver(false) }}
+            onClick={() => {
+              if (!uploadingJustificatif) document.getElementById("justificatif-upload")?.click()
+            }}
+            className={`rounded-xl border-2 border-dashed p-8 text-center transition ${
+              dragOver
+                ? "border-primary bg-primary/5"
+                : "border-muted-foreground/25 hover:border-primary/50"
+            } ${uploadingJustificatif ? "pointer-events-none opacity-70" : "cursor-pointer"}`}
+          >
+            {uploadingJustificatif ? (
+              <div className="mx-auto max-w-xs space-y-3">
+                <IconLoader2 className="mx-auto size-8 animate-spin text-primary" />
+                <Progress value={uploadProgress} className="h-2" />
+                <p className="text-sm text-muted-foreground">Téléversement… {uploadProgress}%</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <IconCloudUpload className="mx-auto size-8 text-primary" />
+                <p className="font-medium">Glissez-déposez votre justificatif PDF ici</p>
+                <p className="text-sm text-muted-foreground">ou cliquez pour sélectionner un fichier</p>
+              </div>
+            )}
+          </div>
+
+          {uploadedJustificatif && (
+            <div className="flex items-center gap-3 rounded-lg border p-3">
+              <IconFile className="size-5 text-primary" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{uploadedJustificatif.original_name}</p>
+                <p className="text-xs text-muted-foreground">{formatBytes(uploadedJustificatif.size)}</p>
+              </div>
+              <Button type="button" variant="ghost" size="icon" onClick={handleJustificatifDelete}>
+                <IconX className="size-4 text-red-500" />
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 

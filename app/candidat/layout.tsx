@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname } from "next/navigation"
 import {
   IconCheck,
   IconCircle,
@@ -15,6 +15,7 @@ import {
   IconFlask,
   IconClipboardCheck,
   IconUpload,
+  IconChevronRight,
 } from "@tabler/icons-react"
 
 import { NavUser } from "@/components/nav-user"
@@ -29,14 +30,32 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton,
   SidebarProvider,
   SidebarTrigger,
   SidebarGroup,
   SidebarGroupLabel,
   SidebarGroupContent,
 } from "@/components/ui/sidebar"
+import { Collapsible } from "radix-ui"
 
-const candidatureSteps = [
+interface SubStep {
+  title: string
+  url: string
+}
+
+interface CandidatureStep {
+  id: number
+  title: string
+  description: string
+  url: string
+  icon: typeof IconFileDescription
+  subSteps?: SubStep[]
+}
+
+const candidatureSteps: CandidatureStep[] = [
   {
     id: 1,
     title: "Profil",
@@ -64,6 +83,11 @@ const candidatureSteps = [
     description: "A/1 – A/3",
     url: "/candidat/candidature/activites-enseignement",
     icon: IconSchool,
+    subSteps: [
+      { title: "A/1 — Production pédagogique", url: "/candidat/candidature/activites-enseignement/a1" },
+      { title: "A/2 — Encadrement", url: "/candidat/candidature/activites-enseignement/a2" },
+      { title: "A/3 — Responsabilités", url: "/candidat/candidature/activites-enseignement/a3" },
+    ],
   },
   {
     id: 5,
@@ -71,6 +95,12 @@ const candidatureSteps = [
     description: "B/1 – B/4",
     url: "/candidat/candidature/activites-recherche",
     icon: IconFlask,
+    subSteps: [
+      { title: "B/1 — Production scientifique", url: "/candidat/candidature/activites-recherche/b1" },
+      { title: "B/2 — Encadrement scientifique", url: "/candidat/candidature/activites-recherche/b2" },
+      { title: "B/3 — Responsabilités scientifiques", url: "/candidat/candidature/activites-recherche/b3" },
+      { title: "B/4 — Rayonnement & valorisation", url: "/candidat/candidature/activites-recherche/b4" },
+    ],
   },
   {
     id: 6,
@@ -87,7 +117,6 @@ export default function CandidatLayout({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
-  const router = useRouter()
   const [user, setUser] = React.useState<{
     name: string
     email: string
@@ -136,43 +165,9 @@ export default function CandidatLayout({
     window.location.href = "/login"
   }
 
-  const requiredStepIds = [1, 2, 3, 4, 5]
   const stepCompletion = progress?.steps ?? {}
 
-  const getStepTitleById = (id: number) => candidatureSteps.find((s) => s.id === id)?.title ?? `Étape ${id}`
-
-  const guardedNavigate = (targetUrl: string) => {
-    const targetStep = candidatureSteps.find((s) => s.url === targetUrl)
-    const currentStep = candidatureSteps.find((s) => pathname.startsWith(s.url))
-
-    if (!targetStep) {
-      router.push(targetUrl)
-      return
-    }
-
-    // Always allow going backwards.
-    if (currentStep && targetStep.id <= currentStep.id) {
-      router.push(targetUrl)
-      return
-    }
-
-    const missing = requiredStepIds
-      .filter((id) => id < targetStep.id)
-      .filter((id) => !stepCompletion[String(id)])
-
-    if (missing.length === 0) {
-      router.push(targetUrl)
-      return
-    }
-
-    window.alert(
-      `Votre dossier est incomplet. Veuillez terminer d'abord: ${missing
-        .map(getStepTitleById)
-        .join(", ")}.`
-    )
-  }
-
-  const getStepIcon = (step: typeof candidatureSteps[0]) => {
+  const getStepIcon = (step: CandidatureStep) => {
     const isActive = pathname.startsWith(step.url)
     const isCompleted = Boolean(stepCompletion[String(step.id)])
 
@@ -225,29 +220,72 @@ export default function CandidatLayout({
             <SidebarGroupLabel>Dossier de candidature</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {candidatureSteps.map((step) => (
-                  <SidebarMenuItem key={step.id}>
-                    <SidebarMenuButton 
-                      asChild 
-                      isActive={pathname.startsWith(step.url)}
-                      className="justify-between"
-                    >
-                      <Link
-                        href={step.url}
-                        onClick={(e) => {
-                          e.preventDefault()
-                          guardedNavigate(step.url)
-                        }}
+                {candidatureSteps.map((step) => {
+                  const isActive = pathname.startsWith(step.url)
+                  const hasSubSteps = step.subSteps && step.subSteps.length > 0
+
+                  if (hasSubSteps) {
+                    return (
+                      <Collapsible.Root
+                        key={step.id}
+                        defaultOpen={isActive}
+                        className="group/collapsible"
                       >
-                        <div className="flex items-center gap-2">
-                          <step.icon className="size-4" />
-                          <span>{step.title}</span>
-                        </div>
-                        {getStepIcon(step)}
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
+                        <SidebarMenuItem>
+                          <Collapsible.Trigger asChild>
+                            <SidebarMenuButton
+                              isActive={isActive}
+                              className="justify-between"
+                            >
+                              <div className="flex items-center gap-2">
+                                <step.icon className="size-4" />
+                                <span>{step.title}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                {getStepIcon(step)}
+                                <IconChevronRight className="size-3.5 transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                              </div>
+                            </SidebarMenuButton>
+                          </Collapsible.Trigger>
+                          <Collapsible.Content>
+                            <SidebarMenuSub>
+                              {step.subSteps!.map((sub) => (
+                                <SidebarMenuSubItem key={sub.url}>
+                                  <SidebarMenuSubButton
+                                    asChild
+                                    isActive={pathname === sub.url}
+                                  >
+                                    <Link href={sub.url}>
+                                      <span>{sub.title}</span>
+                                    </Link>
+                                  </SidebarMenuSubButton>
+                                </SidebarMenuSubItem>
+                              ))}
+                            </SidebarMenuSub>
+                          </Collapsible.Content>
+                        </SidebarMenuItem>
+                      </Collapsible.Root>
+                    )
+                  }
+
+                  return (
+                    <SidebarMenuItem key={step.id}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isActive}
+                        className="justify-between"
+                      >
+                        <Link href={step.url}>
+                          <div className="flex items-center gap-2">
+                            <step.icon className="size-4" />
+                            <span>{step.title}</span>
+                          </div>
+                          {getStepIcon(step)}
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )
+                })}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

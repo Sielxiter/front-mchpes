@@ -9,6 +9,7 @@ import {
   IconFileDescription,
   IconLock,
   IconMail,
+  IconDownload,
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -17,14 +18,9 @@ import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
 import { toast } from "sonner"
 import { me } from "@/lib/auth"
-import { candidatureApi, profileApi, enseignementsApi, pfesApi, activitesApi, ApiRequestError } from "@/lib/api"
+import { candidatureApi, generatedDocsApi, ApiRequestError } from "@/lib/api"
+import type { GeneratedDocTypeKey } from "@/lib/api"
 import { clearAllDrafts } from "@/hooks/use-local-draft"
-import {
-  generateProfilePdf,
-  generateEnseignementsPdf,
-  generatePfePdf,
-  generateActivitesAttestationPdf,
-} from "@/lib/pdf/generated-documents"
 
 interface StepStatus {
   id: number
@@ -52,105 +48,31 @@ export default function ValidationPage() {
     nonModification: false,
   })
 
-  const openPdfBlob = (blob: Blob, filename: string) => {
-    const url = URL.createObjectURL(blob)
-    const popup = window.open(url, "_blank", "noopener,noreferrer")
-    if (!popup) {
-      const a = document.createElement("a")
-      a.href = url
-      a.download = filename
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-    }
-    setTimeout(() => URL.revokeObjectURL(url), 60_000)
-  }
+  const [generatingType, setGeneratingType] = useState<string | null>(null)
 
-  const handlePreviewGenerated = async (
-    docId: "profile" | "enseignements" | "pfes" | "attestation_ens" | "attestation_rech"
-  ) => {
+  const handlePreviewGenerated = async (docId: GeneratedDocTypeKey) => {
+    setGeneratingType(docId)
     try {
-      if (!user) {
-        const u = await me()
-        if (u) setUser(u)
+      const blob = await generatedDocsApi.preview(docId)
+      const url = URL.createObjectURL(blob)
+      const popup = window.open(url, "_blank", "noopener,noreferrer")
+      if (!popup) {
+        const a = document.createElement("a")
+        a.href = url
+        a.download = `${docId}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
       }
-
-      if (docId === "profile") {
-        const { profile, user: apiUser } = await profileApi.getProfile()
-        const blob = await generateProfilePdf({ profile, user: apiUser })
-        openPdfBlob(blob, "formulaire-candidature.pdf")
-        return
-      }
-
-      if (docId === "enseignements") {
-        const { enseignements, totals } = await enseignementsApi.getAll()
-        const blob = await generateEnseignementsPdf({
-          enseignements: enseignements.map((e) => ({
-            annee_universitaire: e.annee_universitaire,
-            intitule: e.intitule,
-            type_enseignement: e.type_enseignement,
-            type_module: e.type_module,
-            niveau: e.niveau,
-            volume_horaire: Number(e.volume_horaire),
-            equivalent_tp: Number(e.equivalent_tp),
-          })),
-          totals: {
-            volume_horaire: Number(totals?.volume_horaire ?? 0),
-            equivalent_tp: Number(totals?.equivalent_tp ?? 0),
-          },
-        })
-        openPdfBlob(blob, "recapitulatif-enseignements.pdf")
-        return
-      }
-
-      if (docId === "pfes") {
-        const { pfes, totals } = await pfesApi.getAll()
-        const blob = await generatePfePdf({
-          pfes: pfes.map((p) => ({
-            annee_universitaire: p.annee_universitaire,
-            intitule: p.intitule,
-            niveau: p.niveau,
-            volume_horaire: Number(p.volume_horaire),
-          })),
-          totals: {
-            volume_horaire: Number(totals?.volume_horaire ?? 0),
-            count: Number(totals?.count ?? pfes.length),
-          },
-        })
-        openPdfBlob(blob, "recapitulatif-pfes.pdf")
-        return
-      }
-
-      if (docId === "attestation_ens") {
-        const { activites } = await activitesApi.getAll("enseignement")
-        const blob = await generateActivitesAttestationPdf({
-          title: "Attestation des activités d'enseignement",
-          activites: activites.map((a) => ({
-            category: a.category,
-            subcategory: a.subcategory,
-            count: Number(a.count ?? 0),
-          })),
-        })
-        openPdfBlob(blob, "attestation-activites-enseignement.pdf")
-        return
-      }
-
-      const { activites } = await activitesApi.getAll("recherche")
-      const blob = await generateActivitesAttestationPdf({
-        title: "Attestation des activités de recherche",
-        activites: activites.map((a) => ({
-          category: a.category,
-          subcategory: a.subcategory,
-          count: Number(a.count ?? 0),
-        })),
-      })
-      openPdfBlob(blob, "attestation-activites-recherche.pdf")
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
     } catch (error) {
       if (error instanceof ApiRequestError) {
         toast.error(error.message)
       } else {
         toast.error("Impossible de générer le document")
       }
+    } finally {
+      setGeneratingType(null)
     }
   }
 
@@ -298,7 +220,7 @@ export default function ValidationPage() {
           {[
             { id: "profile" as const, label: "Formulaire de demande de candidature (PDF)" },
             { id: "enseignements" as const, label: "Récapitulatif des enseignements (PDF)" },
-            { id: "pfes" as const, label: "Récapitulatif des PFE encadrés (PDF)" },
+            { id: "pfe" as const, label: "Récapitulatif des PFE encadrés (PDF)" },
             { id: "attestation_ens" as const, label: "Attestation des activités d'enseignement" },
             { id: "attestation_rech" as const, label: "Attestation des activités de recherche" },
           ].map((doc) => (
@@ -310,7 +232,13 @@ export default function ValidationPage() {
                 variant="ghost"
                 className="ml-auto"
                 onClick={() => handlePreviewGenerated(doc.id)}
+                disabled={generatingType === doc.id}
               >
+                {generatingType === doc.id ? (
+                  <IconLoader2 className="mr-1 size-4 animate-spin" />
+                ) : (
+                  <IconDownload className="mr-1 size-4" />
+                )}
                 Prévisualiser
               </Button>
             </div>

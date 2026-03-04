@@ -599,6 +599,127 @@ export const documentsApi = {
 };
 
 // =============================================================================
+// GENERATED DOCUMENTS & SIGNED UPLOADS API
+// =============================================================================
+
+export type GeneratedDocTypeKey =
+  | "profile"
+  | "enseignements"
+  | "pfe"
+  | "attestation_ens"
+  | "attestation_rech"
+
+export interface GeneratedDocStatus {
+  type_key: GeneratedDocTypeKey
+  doc_type: string
+  label: string
+  generated: {
+    id: number
+    original_name: string
+    size: number
+    created_at: string
+  } | null
+  signed_type: string | null
+  signed: {
+    id: number
+    original_name: string
+    size: number
+    created_at: string
+    is_verified: boolean
+  } | null
+}
+
+export const generatedDocsApi = {
+  /**
+   * Get the status of all generated + signed documents
+   */
+  async getStatus(): Promise<{ status: Record<GeneratedDocTypeKey, GeneratedDocStatus> }> {
+    return requestJson("/candidat/documents/generated-status", { method: "GET" });
+  },
+
+  /**
+   * Generate and preview a PDF (returns blob for inline view)
+   */
+  async preview(type: GeneratedDocTypeKey): Promise<Blob> {
+    const response = await fetch(`${API_BASE_URL}/candidat/documents/generate/${type}`, {
+      credentials: "include",
+    });
+    if (!response.ok) {
+      const data = await parseJsonSafe(response);
+      throw new ApiRequestError(data?.error || "Generation failed", response.status);
+    }
+    return response.blob();
+  },
+
+  /**
+   * Get the URL for inline PDF preview (for iframe)
+   */
+  getPreviewUrl(type: GeneratedDocTypeKey): string {
+    return `${API_BASE_URL}/candidat/documents/generate/${type}`;
+  },
+
+  /**
+   * Generate and store a single PDF server-side
+   */
+  async generateAndStore(type: GeneratedDocTypeKey): Promise<{ message: string; document: CandidatureDocument }> {
+    return requestJson(`/candidat/documents/generate/${type}/store`, { method: "POST" });
+  },
+
+  /**
+   * Generate and store all 5 PDFs at once
+   */
+  async generateAll(): Promise<{ message: string; documents: Record<string, CandidatureDocument> }> {
+    return requestJson("/candidat/documents/generate-all", { method: "POST" });
+  },
+
+  /**
+   * Upload a signed/legalized version of a generated document
+   */
+  async uploadSigned(
+    type: GeneratedDocTypeKey,
+    file: File,
+    onProgress?: (percent: number) => void
+  ): Promise<{ message: string; document: CandidatureDocument }> {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    if (onProgress) {
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.upload.addEventListener("progress", (e) => {
+          if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+        });
+        xhr.addEventListener("load", () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(JSON.parse(xhr.responseText));
+          } else {
+            try {
+              const error = JSON.parse(xhr.responseText);
+              reject(new ApiRequestError(error.error || "Upload failed", xhr.status, error.errors));
+            } catch {
+              reject(new ApiRequestError("Upload failed", xhr.status));
+            }
+          }
+        });
+        xhr.addEventListener("error", () => reject(new ApiRequestError("Network error", 0)));
+        xhr.open("POST", `${API_BASE_URL}/candidat/documents/signed/${type}`);
+        xhr.withCredentials = true;
+        xhr.send(formData);
+      });
+    }
+
+    return requestFormData(`/candidat/documents/signed/${type}`, formData);
+  },
+
+  /**
+   * Delete a signed document
+   */
+  async deleteSigned(type: GeneratedDocTypeKey): Promise<{ message: string }> {
+    return requestJson(`/candidat/documents/signed/${type}`, { method: "DELETE" });
+  },
+};
+
+// =============================================================================
 // DEADLINE API (Public)
 // =============================================================================
 

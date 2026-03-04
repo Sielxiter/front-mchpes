@@ -48,11 +48,65 @@ const GRADE_OPTIONS = [
   "Professeur Assistant",
 ]
 
-const VILLES = [
-  "Casablanca", "Rabat", "Fès", "Marrakech", "Tanger", "Meknès", 
-  "Oujda", "Agadir", "Tétouan", "Safi", "El Jadida", "Kénitra", 
-  "Mohammedia", "Béni Mellal", "Nador", "Settat"
-]
+const UNIVERSITES_PAR_VILLE: Record<string, string[]> = {
+  "Casablanca": [
+    "Université Hassan II de Casablanca",
+    "Université Internationale de Casablanca (UIC)",
+    "Mundiapolis University",
+  ],
+  "Rabat": [
+    "Université Mohammed V de Rabat",
+    "Université Internationale de Rabat (UIR)",
+    "Université Al Akhawayn (campus Rabat)",
+  ],
+  "Fès": [
+    "Université Sidi Mohammed Ben Abdellah",
+    "Université Euro-Méditerranéenne de Fès (UEMF)",
+    "Université Privée de Fès (UPF)",
+  ],
+  "Marrakech": [
+    "Université Cadi Ayyad",
+    "Université Privée de Marrakech (UPM)",
+  ],
+  "Tanger": [
+    "Université Abdelmalek Essaâdi",
+  ],
+  "Meknès": [
+    "Université Moulay Ismaïl",
+  ],
+  "Oujda": [
+    "Université Mohammed Premier",
+  ],
+  "Agadir": [
+    "Université Ibn Zohr",
+  ],
+  "Tétouan": [
+    "Université Abdelmalek Essaâdi (Tétouan)",
+  ],
+  "Safi": [
+    "Université Cadi Ayyad (Safi)",
+  ],
+  "El Jadida": [
+    "Université Chouaïb Doukkali",
+  ],
+  "Kénitra": [
+    "Université Ibn Tofaïl",
+  ],
+  "Mohammedia": [
+    "Université Hassan II (Mohammedia)",
+  ],
+  "Béni Mellal": [
+    "Université Sultan Moulay Slimane",
+  ],
+  "Nador": [
+    "Université Mohammed Premier (Nador)",
+  ],
+  "Settat": [
+    "Université Hassan Premier",
+  ],
+}
+
+const VILLES = Object.keys(UNIVERSITES_PAR_VILLE)
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024
 
@@ -225,7 +279,14 @@ export default function ProfilPage() {
   const anciennete = calculateAnciennete()
 
   const updateField = <K extends keyof ProfileForm>(key: K, value: ProfileForm[K]) => {
-    setForm((prev) => ({ ...prev, [key]: value }))
+    setForm((prev) => {
+      const next = { ...prev, [key]: value }
+      // Reset etablissement when ville changes
+      if (key === "ville" && value !== prev.ville) {
+        next.etablissement = ""
+      }
+      return next
+    })
     if (errors[key]) {
       setErrors((prev) => ({ ...prev, [key]: undefined }))
     }
@@ -475,17 +536,6 @@ export default function ProfilPage() {
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="etablissement">Établissement <span className="text-red-500">*</span></Label>
-              <Input
-                id="etablissement"
-                placeholder="Université / École"
-                value={form.etablissement}
-                onChange={(e) => updateField("etablissement", e.target.value)}
-                className={errors.etablissement ? "border-red-500" : ""}
-              />
-              {errors.etablissement && <p className="text-xs text-red-500">{errors.etablissement}</p>}
-            </div>
-            <div className="space-y-2">
               <Label htmlFor="ville">Ville <span className="text-red-500">*</span></Label>
               <Select value={form.ville} onValueChange={(v) => updateField("ville", v)}>
                 <SelectTrigger className={errors.ville ? "border-red-500" : ""}>
@@ -498,6 +548,24 @@ export default function ProfilPage() {
                 </SelectContent>
               </Select>
               {errors.ville && <p className="text-xs text-red-500">{errors.ville}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="etablissement">Établissement <span className="text-red-500">*</span></Label>
+              <Select
+                value={form.etablissement}
+                onValueChange={(v) => updateField("etablissement", v)}
+                disabled={!form.ville}
+              >
+                <SelectTrigger className={errors.etablissement ? "border-red-500" : ""}>
+                  <SelectValue placeholder={form.ville ? "Sélectionner un établissement" : "Sélectionnez d'abord une ville"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {(UNIVERSITES_PAR_VILLE[form.ville] || []).map((univ) => (
+                    <SelectItem key={univ} value={univ}>{univ}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.etablissement && <p className="text-xs text-red-500">{errors.etablissement}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="departement">Département <span className="text-red-500">*</span></Label>
